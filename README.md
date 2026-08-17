@@ -52,8 +52,51 @@ supervisor 每 5 秒轮询请求文件，发现到期请求就执行 停止 → 
 服务意外掉线时 supervisor 也会直接拉起（崩溃自愈）。
 
 ## 安装
-已加入 `~/.dsh/profiles/web`（link 依赖 + bundles + cordis.patch.yml 插行）。
-host 半改动需要**重启 dsh web** 生效；client 半改动刷新页面即生效。
+
+```bash
+dsh plugin --profile web add dsh-web-restart
+# 或使用 GitHub Release tarball：
+# dsh plugin --profile web add https://github.com/qschen86/dsh-web-restart/releases/download/v0.2.0/dsh-web-restart-0.2.0.tgz
+dsh --profile web --dump-config   # 验证条目已加入 bundles
+# 重启 dsh web（host 半生效），刷新页面（client 半生效）
+```
+
+## 初始化（首次安装必做）
+
+重启按钮本身是"请求方"——真正的 kill + 启动由 **launchd 监督进程**执行
+（按钮显示**红色状态点 = 监督进程未运行**）。监督脚本与 plist 模板已随包发布
+（tarball 内 `scripts/`，或仓库 `scripts/` 目录）：
+
+1. **部署监督脚本**：
+
+   ```bash
+   mkdir -p ~/.dsh/scripts
+   cp scripts/dsh-web-supervisor.sh ~/.dsh/scripts/ && chmod +x ~/.dsh/scripts/dsh-web-supervisor.sh
+   ~/.dsh/scripts/dsh-web-supervisor.sh status   # 此时应显示 stopped
+   ```
+
+2. **部署 launchd 配置**（按本机调整脚本路径；dsh 不在 PATH 时在
+   `EnvironmentVariables` 里设 `DSH_BIN`，例如 npx 缓存路径）：
+
+   ```bash
+   cp scripts/com.dsh.web-supervisor.plist.example ~/Library/LaunchAgents/com.dsh.web-supervisor.plist
+   # 编辑 plist：把 /Users/YOUR_USER 换成你的用户名
+   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.dsh.web-supervisor.plist
+   ```
+
+3. **验证**：约 5 秒后 `~/.dsh/scripts/dsh-web-supervisor.sh status` 应输出
+   `running`；再刷新页面，重启按钮应变为绿色状态点。
+
+4. **卸载插件时一并移除监督进程**（可选）：
+
+   ```bash
+   launchctl bootout gui/$(id -u)/com.dsh.web-supervisor
+   rm ~/Library/LaunchAgents/com.dsh.web-supervisor.plist
+   dsh plugin --profile web remove dsh-web-restart
+   ```
+
+> 只装插件不装监督进程 = 按钮永远红色、重启请求不会被执行（插件与脚本设计上
+> 分离，监督进程缺位不会影响 dsh web 本身）。
 
 ## 依赖说明
 
