@@ -2,6 +2,39 @@
 
 DSH web 插件：从界面重启 dsh web 服务，不再需要人工重启；并可选地在重启后**自动继续**被中断的会话。
 
+## 功能图示
+
+**侧边栏底部重启按钮**：任何布局（首页 / 会话 / 日历模式）下都固定在左 rail 最底部。
+圆点颜色反映状态：绿 = 服务运行中、监督进程在线；黄 = 已有重启请求排队；红 = 监督进程未运行。
+
+![重启按钮（左 rail 底部，绿点 = 就绪）](docs/screenshots/01-restart-button.png)
+
+**确认弹窗**：点击按钮后居中弹出，说明操作影响并展示"重启后自动继续中断的会话"开关；
+只有点击"确认重启"才会真正发出请求，杜绝误触。
+
+![确认弹窗（含自动继续开关）](docs/screenshots/02-confirm-modal.png)
+
+**监督进程日志**（`~/.dsh/dsh-web-restart.log`）：完整记录 轮询 → 请求到期 → 停止(TERM)
+→ 端口释放 → 重新拉起 的链路；服务意外掉线时 watch 直接拉起（崩溃自愈）；启动失败会把
+服务日志尾部一并落盘，方便定位（如插件依赖缺失）。
+
+![监督进程日志（watch 循环）](docs/screenshots/04-supervisor-log.png)
+
+## 应用场景
+
+- **升级 dsh / 插件后一键生效**：host 半的改动需要重启 dsh web 进程。以往要在终端里手动
+  kill + 重启（还要担心会话中断）；现在点一下按钮，约 10 秒后服务回来，被中断的会话自动继续。
+- **长任务与目标续跑（autoContinueAfterRestart）**：夜间无人值守跑 goal 任务时，任何一次
+  服务重启（升级、掉线、手动）后，被中断的顶层会话与 active goal 会在下次启动时自动恢复续跑，
+  不用早上起来手动"继续"。
+- **服务崩溃自愈**：dsh web 意外退出后，launchd 监督进程 5 秒内自动拉起（无需登录终端）；
+  GUI 状态点实时反映监督进程是否在线。
+- **无人值守 / 远程环境**：监督进程独立于 dsh web 进程树（launchd 托管、KeepAlive 保活），
+  即使 dsh web 完全不可用，重启链依然可用；`halt` 命令一条命令彻底停掉守护进程。
+- **本地开发迭代插件**：改了插件 host 代码后点按钮重启即可生效；`ensure_deps` 会在启动前
+  自动补装缺失的插件依赖——曾因插件目录 `node_modules` 被清导致重启后起不来、服务宕机约
+  一小时，现在 supervisor 能自愈。
+
 ## 名字
 - 插件包：`dsh-web-restart`（host 行 id：`web-restart`）
 - 配套监督进程（launchd）：`com.dsh.web-supervisor`，脚本 `~/.dsh/scripts/dsh-web-supervisor.sh`
@@ -15,7 +48,11 @@ DSH web 插件：从界面重启 dsh web 服务，不再需要人工重启；并
   - 在**侧边栏（左 rail）最底部**（`sidebar.rail.footer` 插槽，与余额等底部项并列；首页 / 会话 / 日历模式等任何布局都固定可见）放重启按钮：环形箭头 icon（rail 展开为宽栏时带文字标签），带状态圆点（绿=运行中 / 黄=重启排队中 / 红=监督进程未运行）；
     - 绿 = 服务运行中、监督进程在线；黄 = 已有重启请求排队；红 = 监督进程未运行 / 状态获取失败
   - **点击按钮弹出居中确认弹窗**：描述操作效果（服务将停止并重启、运行中的会话会被中断、自动继续开关状态）与"确认重启 / 取消"按钮；**只有点击"确认重启"才会发出请求**，杜绝误触；确认后图标旋转表达"重启中"，页面在延迟后自动刷新（Esc / 点击遮罩 / 取消可关闭弹窗，监督进程未运行时确认按钮禁用）
-- **设置卡片**（client 半）：在 **设置 → 插件 → 插件配置** 注册一张卡片（id `web-restart`），就地展开后是"重启后自动继续中断的会话"开关，按 settings 领域惯例：暂存 → 保存 / 放弃修改 / 恢复默认，并标注是否"已覆盖"
+- **设置卡片**（client 半）：在 **设置 → 插件 → 插件配置** 注册一张卡片（id `web-restart`），就地展开后是"重启后自动继续中断的会话"开关，按 settings 领域惯例：暂存 → 保存 / 放弃修改 / 恢复默认，并标注是否"已覆盖"。
+  > **已知限制**：在 include 方式挂载的部署（如仓库 `link:` 工作区插件）下，插件注册的 settings
+  > 命名空间可能不出现在 UI 的 `settings.describe` 列表里，卡片因此静默不显示。开关此时可用
+  > **重启弹窗内的同名开关**，或直接编辑 `~/.dsh/settings.yaml` 的 `web-restart` 分节；
+  > 两条写入路径都走同一个 settings 文档，效果一致。
 
 ## 自动继续（autoContinueAfterRestart）
 
@@ -31,6 +68,7 @@ DSH web 插件：从界面重启 dsh web 服务，不再需要人工重启；并
 
 ### 配置方式（二选一）
 1. **设置界面（推荐）**：**设置 → 插件 → 插件配置** → 展开"重启服务设置"卡片 → 切换开关 → 保存。
+   （若卡片因部署差异未显示，用**重启弹窗内的同名开关**，效果相同。）
 2. **设置文档 / 补丁**：用户覆盖写入 `~/.dsh/settings.yaml` 的 `web-restart` 分节（直接编辑该文件也会被 watcher 热发布）：
    ```yaml
    web-restart:
@@ -50,6 +88,15 @@ DSH web 插件：从界面重启 dsh web 服务，不再需要人工重启；并
 因此插件只负责"请求"，真正的 kill + 启动由 launchd 托管的监督进程（进程树之外）执行：
 supervisor 每 5 秒轮询请求文件，发现到期请求就执行 停止 → 等端口释放 → 启动 → 健康检查；
 服务意外掉线时 supervisor 也会直接拉起（崩溃自愈）。
+
+监督脚本（v0.3）要点：
+- **`ensure_deps`**：每次启动前检查 profile 里所有 `link:` 插件目录的依赖，缺失则自动
+  `npm install`——修复了"插件目录 node_modules 被清后 dsh web 启动即崩、服务宕机数小时"的故障；
+- **失败诊断**：`start` 失败时把 `~/.dsh/dsh-web.log` 尾部写进监督日志，根因不用翻文件；
+- **单实例锁**（mkdir 原子锁 + 陈旧锁回收），避免 watch 重复运行；
+- **失败退避**：连续启动失败时轮询间隔 5s → 30s → 60s，避免空转；
+- **`halt` 命令**：一条命令彻底停掉守护（launchctl bootout + 停服务）；注意 `stop` 只是
+  临时停——watch 会在 5 秒内拉回（launchd KeepAlive 也会重生被杀的 supervisor）。
 
 ## 安装
 
@@ -98,15 +145,29 @@ dsh --profile web --dump-config   # 验证条目已加入 bundles
 > 只装插件不装监督进程 = 按钮永远红色、重启请求不会被执行（插件与脚本设计上
 > 分离，监督进程缺位不会影响 dsh web 本身）。
 
+5. **彻底停止 / 重新启用守护**（可选）：
+
+   ```bash
+   ~/.dsh/scripts/dsh-web-supervisor.sh halt                          # 停守护（bootout + 停服务）
+   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.dsh.web-supervisor.plist   # 重新启用
+   ```
+
 ## 依赖说明
 
 host 半静态导入 `@deepseek-ai/schemastery`（构造 settings 命名空间的 schema），
-已在 package.json 声明为正式依赖（`dependencies`），`dsh plugin add` 时会随包安装。
-本地开发环境下该依赖由 `$DSH_HOME/profiles/node_modules`（flat fallback，指向当前
-dsh 安装闭包）提供，无需在插件目录内放任何 node_modules。
+已在 package.json 声明为正式依赖（`dependencies`）。
+
+- **tarball / `dsh plugin add` 安装**：依赖随包安装进 profile，由包管理器解析，无需额外处理。
+- **本地 `link:` 开发**（仓库直接挂进 profile，如 `dsh-web-restart: link:...`）：pnpm 的
+  `link:` 只建符号链接、**不会安装目标包自身的依赖**——插件目录必须有自己的
+  `node_modules`（`cd dsh-web-restart && npm install`）。依赖缺失时 dsh web 启动会因插件树
+  加载失败直接退出（`ERR_MODULE_NOT_FOUND`，曾导致重启后服务宕机约一小时）。
+- **自愈**：监督脚本 v0.3 的 `ensure_deps` 在每次启动前检查并自动补装缺失依赖；即使插件
+  目录被 `git clean -fdx` 清空，下一次重启也会自动恢复。
 
 ## 相关文件
 - 重启请求文件：`~/.dsh/dsh-web.restart-request`（内容为到期 unix 秒时间戳）
 - 运行时状态（启动标记 / 上次扫描结果，非用户配置）：`~/.dsh/dsh-web-restart.json`；用户配置：`~/.dsh/settings.yaml`（`web-restart` 分节）
 - 监督进程日志：`~/.dsh/dsh-web-restart.log`、`~/.dsh/dsh-web.log`
 - launchd：`~/Library/LaunchAgents/com.dsh.web-supervisor.plist`
+- 截图：`docs/screenshots/`（01 重启按钮 / 02 确认弹窗 / 04 监督日志）
