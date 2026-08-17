@@ -1,0 +1,21 @@
+# dsh-web-restart bundle patch: one host row inserted over the web layer.
+# The plugin's browser half is the package's own ./client export (dsh.client);
+# it adds a "restart service" button to the very bottom of the left rail
+# (sidebar.rail.footer, visible in every layout) that opens a centered confirm
+# modal and, only after confirmation, asks the launchd supervisor
+# (com.dsh.web-supervisor) to restart dsh web via the request file
+# ~/.dsh/dsh-web.restart-request.
+#
+# config.autoContinueAfterRestart (default false):
+#   - false: after a restart, interrupted sessions must be continued manually.
+#   - true:  shortly after boot the plugin resumes every top-level session cut
+#            short by the previous shutdown (active goals are re-armed and keep
+#            running rounds; other sessions get a synthetic "continue" prompt).
+# The switch can also be toggled at runtime from the settings popover (the gear
+# next to the restart button); the persisted value lives in
+# ~/.dsh/dsh-web-restart.json and overrides this patch default.
+- insert:
+    - id: web-restart
+      name: 'dsh-web-restart'
+      config:
+        autoContinueAfterRestart: false

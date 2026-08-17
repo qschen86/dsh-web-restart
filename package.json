@@ -1,0 +1,37 @@
+{
+  "name": "dsh-web-restart",
+  "version": "0.2.0",
+  "description": "DSH web plugin: restart the dsh web service from the UI, with an optional auto-continue switch (设置 → 插件 → 插件配置) that resumes sessions interrupted by the restart. Host half exposes /plugin/dsh-web-restart (status + restart request) and /plugin/dsh-web-restart/config (auto-continue switch, settings domain); the browser half adds a restart button to the very bottom of the left rail (sidebar.rail.footer, visible in every layout — home / session / calendar) that opens a centered confirm modal before sending the request, plus a plugin-configuration card (设置 → 插件 → 插件配置). The actual kill/start is performed by the launchd supervisor (com.dsh.web-supervisor), which polls ~/.dsh/dsh-web.restart-request.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml"
+  ],
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "slots",
+        "locale",
+        "settingsScope"
+      ]
+    }
+  }
+}
